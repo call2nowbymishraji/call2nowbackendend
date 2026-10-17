@@ -4,7 +4,7 @@ const User = require('../models/User');
 const BusinessProfile = require('../models/BusinessProfile');
 const Otp = require('../models/Otp');
 const { signToken } = require('../middleware/auth');
-const { generateCode, hashCode, sendOtpEmail, isProduction } = require('../utils/otp');
+const { generateCode, hashCode, sendOtpEmail, isProduction, mailConfigured } = require('../utils/otp');
 
 const OTP_TTL_MIN = 10;
 
@@ -31,7 +31,7 @@ async function issueOtp(email, purpose, payload) {
   } catch (e) {
     console.error('[otp] send failed', e.code || e.message);
   }
-  if (!sent && process.env.SMTP_HOST) {
+  if (!sent && mailConfigured()) {
     await Otp.deleteOne({ _id: otp._id });
     throw new Error('Could not send the verification email right now. Please try again in a minute.');
   }
@@ -66,7 +66,7 @@ exports.resendOtp = async (req, res) => {
     } catch (e) {
       console.error('[otp] resend failed', e.code || e.message);
     }
-    if (!sent && process.env.SMTP_HOST)
+    if (!sent && mailConfigured())
       return res.status(500).json({ message: 'Could not send the verification email right now. Please try again in a minute.' });
     existing.codeHash = hashCode(code);
     existing.expiresAt = new Date(Date.now() + OTP_TTL_MIN * 60 * 1000);
