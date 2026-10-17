@@ -25,7 +25,16 @@ async function issueOtp(email, purpose, payload) {
     payload,
     expiresAt: new Date(Date.now() + OTP_TTL_MIN * 60 * 1000),
   });
-  await sendOtpEmail(email, code).catch((e) => console.error('[otp] send failed', e.message));
+  let sent = false;
+  try {
+    sent = await sendOtpEmail(email, code);
+  } catch (e) {
+    console.error('[otp] send failed', e.code || e.message);
+  }
+  if (!sent && process.env.SMTP_HOST) {
+    await Otp.deleteOne({ _id: otp._id });
+    throw new Error('Could not send the verification email right now. Please try again in a minute.');
+  }
   return { otp, code };
 }
 
@@ -51,10 +60,17 @@ exports.resendOtp = async (req, res) => {
     const existing = await Otp.findOne({ email: email?.toLowerCase(), purpose });
     if (!existing) return res.status(404).json({ message: 'No pending verification for this email' });
     const code = generateCode();
+    let sent = false;
+    try {
+      sent = await sendOtpEmail(existing.email, code);
+    } catch (e) {
+      console.error('[otp] resend failed', e.code || e.message);
+    }
+    if (!sent && process.env.SMTP_HOST)
+      return res.status(500).json({ message: 'Could not send the verification email right now. Please try again in a minute.' });
     existing.codeHash = hashCode(code);
     existing.expiresAt = new Date(Date.now() + OTP_TTL_MIN * 60 * 1000);
     await existing.save();
-    await sendOtpEmail(existing.email, code).catch(() => {});
     res.json({ message: 'New OTP sent', devCode: devCode(code) });
   } catch (e) {
     res.status(500).json({ message: e.message });
