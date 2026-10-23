@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const c = require('../controllers/adminController');
+const cat = require('../controllers/categoryController');
 const { protect, adminOnly } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
@@ -21,5 +22,9 @@ router.get('/ads', c.listAds);
 router.post('/ads', upload.single('image'), c.createAd);
 router.put('/ads/:id', c.toggleAd);
 router.delete('/ads/:id', c.deleteAd);
+router.get('/categories', cat.adminList);
+router.post('/categories', cat.create);
+router.put('/categories/:id', cat.rename);
+router.delete('/categories/:id', cat.remove);
 
 module.exports = router;

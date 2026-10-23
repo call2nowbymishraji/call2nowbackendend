@@ -18,6 +18,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/profiles', require('./routes/profiles'));
 app.use('/api/search', require('./routes/search'));
 app.use('/api/promo', require('./routes/promo'));
+app.use('/api/categories', require('./routes/categories'));
 app.use('/api/admin', require('./routes/admin'));
 
 app.use((req, res) => res.status(404).json({ message: 'Route not found' }));

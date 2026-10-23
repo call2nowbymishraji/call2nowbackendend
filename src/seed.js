@@ -5,6 +5,8 @@ const User = require('./models/User');
 const BusinessProfile = require('./models/BusinessProfile');
 const PromoSlide = require('./models/PromoSlide');
 const Ad = require('./models/Ad');
+const Category = require('./models/Category');
+const DEFAULT_CATEGORIES = require('./utils/defaultCategories');
 const { slugify } = require('./utils/slug');
 
 const SAMPLES = [
@@ -117,6 +119,11 @@ async function run() {
       suggested: true,
     });
     console.log('[seed] profile created →', s.shopName);
+  }
+
+  if ((await Category.countDocuments()) === 0) {
+    await Category.insertMany(DEFAULT_CATEGORIES.map((name, i) => ({ name, order: i + 1 })));
+    console.log('[seed] categories created →', DEFAULT_CATEGORIES.length);
   }
 
   if ((await PromoSlide.countDocuments()) === 0) {
