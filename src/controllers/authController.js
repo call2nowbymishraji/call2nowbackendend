@@ -107,15 +107,25 @@ exports.login = async (req, res) => {
 
 exports.google = async (req, res) => {
   try {
-    let { email, name, credential } = req.body;
-    if (process.env.GOOGLE_CLIENT_ID && credential) {
+    const { credential } = req.body;
+    let email;
+    let name;
+    if (credential) {
       // Verify the Google ID token against Google's public keys.
+      if (!process.env.GOOGLE_CLIENT_ID) return res.status(500).json({ message: 'Google login is not configured on the server' });
       const { OAuth2Client } = require('google-auth-library');
       const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
       const ticket = await client.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
       const p = ticket.getPayload();
+      if (!p?.email || p.email_verified === false) return res.status(401).json({ message: 'Google did not return a verified email' });
       email = p.email;
       name = p.name || p.email;
+    } else if (process.env.GOOGLE_DEV_LOGIN === 'true') {
+      // Demo shortcut for local runs only. GOOGLE_DEV_LOGIN must never be set in a
+      // deployed environment, because this branch trusts whatever email is posted.
+      ({ email, name } = req.body);
+    } else {
+      return res.status(401).json({ message: 'Google login requires a credential' });
     }
     if (!/^\S+@\S+\.\S+$/.test(email || '')) return res.status(400).json({ message: 'Google login failed: no email provided' });
     let user = await User.findOne({ email: email.toLowerCase() });

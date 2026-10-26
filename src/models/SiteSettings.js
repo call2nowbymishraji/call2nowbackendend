@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const settingsSchema = new mongoose.Schema(
   {
     featuredLive: { type: Boolean, default: false },
+    homeFiltersLive: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

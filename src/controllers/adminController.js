@@ -1,8 +1,8 @@
 const BusinessProfile = require('../models/BusinessProfile');
 const PromoSlide = require('../models/PromoSlide');
-const SiteSettings = require('../models/SiteSettings');
 const Ad = require('../models/Ad');
 const { storeFile } = require('../utils/files');
+const { settingsDoc } = require('../utils/settings');
 
 exports.listProfiles = async (req, res) => {
   const profiles = await BusinessProfile.find().sort({ createdAt: -1 }).populate('user', 'name email');
@@ -77,17 +77,23 @@ exports.deleteSlide = async (req, res) => {
 };
 
 exports.getSettings = async (req, res) => {
-  let s = await SiteSettings.findOne();
-  if (!s) s = await SiteSettings.create({});
-  res.json({ settings: { featuredLive: s.featuredLive } });
+  const s = await settingsDoc();
+  res.json({ settings: { featuredLive: s.featuredLive, homeFiltersLive: s.homeFiltersLive } });
 };
 
 exports.setSettings = async (req, res) => {
-  let s = await SiteSettings.findOne();
-  if (!s) s = await SiteSettings.create({});
+  const s = await settingsDoc();
   if (typeof req.body.featuredLive === 'boolean') s.featuredLive = req.body.featuredLive;
+  if (typeof req.body.homeFiltersLive === 'boolean') s.homeFiltersLive = req.body.homeFiltersLive;
   await s.save();
-  res.json({ message: s.featuredLive ? 'Featured section is live' : 'Featured section is hidden', settings: { featuredLive: s.featuredLive } });
+  const msgs = [];
+  if (typeof req.body.featuredLive === 'boolean') msgs.push(s.featuredLive ? 'Featured section is live' : 'Featured section is hidden');
+  if (typeof req.body.homeFiltersLive === 'boolean')
+    msgs.push(s.homeFiltersLive ? 'Search filters are live on the home page' : 'Search filters are hidden on the home page');
+  res.json({
+    message: msgs.join('. ') || 'Settings updated',
+    settings: { featuredLive: s.featuredLive, homeFiltersLive: s.homeFiltersLive },
+  });
 };
 
 exports.listAds = async (req, res) => {

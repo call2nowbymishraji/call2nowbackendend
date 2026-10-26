@@ -35,6 +35,10 @@ function parseBody(req) {
     whatsapp: b.whatsapp || b.phone,
     email: b.email,
     address: b.address,
+    country: (b.country || 'India').trim(),
+    state: (b.state || '').trim(),
+    city: (b.city || '').trim(),
+    pincode: (b.pincode || '').trim(),
     inMarketSince: b.inMarketSince ? Number(b.inMarketSince) : null,
     description: b.description || '',
     gst: b.gst || '',
@@ -45,7 +49,7 @@ function parseBody(req) {
     whatsappUrl: b.whatsappUrl || '',
     website: b.website || '',
     x: b.x || '',
-    linkedin: b.linkedin || '',
+    youtube: b.youtube || '',
     onlineDelivery: bool(b.onlineDelivery),
     panIndia: bool(b.panIndia),
     operationDays,
@@ -63,9 +67,6 @@ async function assemble(data, req) {
 
   const shopFile = fileByField(req, 'shopImage');
   out.shopImage = shopFile ? await storeFile(shopFile, 'shops') : req.body.keepShopImage || null;
-
-  const coverFile = fileByField(req, 'coverImage');
-  out.coverImage = coverFile ? await storeFile(coverFile, 'covers') : req.body.keepCoverImage || null;
 
   const newGallery = await Promise.all(filesByField(req, 'gallery').map((f) => storeFile(f, 'gallery')));
   out.gallery = [...data.keepGallery, ...newGallery].slice(0, 9);
@@ -92,6 +93,13 @@ function validate(data, res) {
   if (!/^\d{10}$/.test((data.phone || '').replace(/\D/g, ''))) return res.status(400).json({ message: 'A 10-digit phone number is required' });
   if (!/^\S+@\S+\.\S+$/.test(data.email || '')) return res.status(400).json({ message: 'Valid email is required' });
   if (!data.address?.trim()) return res.status(400).json({ message: 'Address is required' });
+  if (!data.city?.trim()) return res.status(400).json({ message: 'City is required' });
+  if (data.country === 'India') {
+    if (!data.state?.trim()) return res.status(400).json({ message: 'State is required' });
+    if (!/^\d{6}$/.test(data.pincode)) return res.status(400).json({ message: 'A 6-digit pin code is required' });
+  } else if (data.pincode && !/^[A-Za-z0-9][A-Za-z0-9 -]{2,9}$/.test(data.pincode)) {
+    return res.status(400).json({ message: 'Postal code looks invalid' });
+  }
   if (!data.products.length) return res.status(400).json({ message: 'At least 1 product is compulsory' });
   if (data.products.length > 10) return res.status(400).json({ message: 'Maximum 10 products allowed' });
   for (const p of data.products) {

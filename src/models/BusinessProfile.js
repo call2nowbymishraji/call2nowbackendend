@@ -22,6 +22,10 @@ const profileSchema = new mongoose.Schema(
     whatsapp: { type: String, default: '' },
     email: { type: String, required: true },
     address: { type: String, required: true },
+    country: { type: String, default: 'India', trim: true },
+    state: { type: String, default: '', trim: true },
+    city: { type: String, default: '', trim: true },
+    pincode: { type: String, default: '', trim: true },
     inMarketSince: { type: Number, default: null },
     description: { type: String, default: '' },
     gst: { type: String, default: '' },
@@ -32,9 +36,8 @@ const profileSchema = new mongoose.Schema(
     whatsappUrl: { type: String, default: '' },
     website: { type: String, default: '' },
     x: { type: String, default: '' },
-    linkedin: { type: String, default: '' },
+    youtube: { type: String, default: '' },
     shopImage: { type: String, default: null },
-    coverImage: { type: String, default: null },
     pageSlug: { type: String, required: true, unique: true },
     onlineDelivery: { type: Boolean, default: false },
     panIndia: { type: Boolean, default: false },
@@ -61,5 +64,6 @@ const profileSchema = new mongoose.Schema(
 );
 
 profileSchema.index({ shopName: 'text', ownerName: 'text', description: 'text', category: 'text' });
+profileSchema.index({ city: 1, state: 1 });
 
 module.exports = mongoose.model('BusinessProfile', profileSchema);
