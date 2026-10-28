@@ -5,6 +5,7 @@ const BusinessProfile = require('../models/BusinessProfile');
 const Otp = require('../models/Otp');
 const { signToken } = require('../middleware/auth');
 const { generateCode, hashCode, sendOtpEmail, isProduction, mailConfigured } = require('../utils/otp');
+const { normalizePhone, dobKey } = require('../utils/phoneDob');
 
 const OTP_TTL_MIN = 10;
 
@@ -186,6 +187,105 @@ exports.forgotReset = async (req, res) => {
     await user.save();
     await Otp.deleteOne({ _id: otp._id });
     res.json({ message: 'Password updated successfully' });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+};
+
+// A date of birth is a low entropy secret, so guesses at it are capped per number.
+// Password attempts are not counted: they are already bcrypt rate limited by the hash cost.
+const DOB_MAX_ATTEMPTS = 8;
+const DOB_WINDOW_MS = 15 * 60 * 1000;
+const dobAttempts = new Map(); // phone -> { count, until }
+
+function dobBlocked(phone) {
+  const rec = dobAttempts.get(phone);
+  if (rec && rec.until <= Date.now()) {
+    dobAttempts.delete(phone);
+    return false;
+  }
+  return Boolean(rec && rec.count >= DOB_MAX_ATTEMPTS);
+}
+
+function dobFailed(phone) {
+  const rec = dobAttempts.get(phone);
+  if (!rec || rec.until <= Date.now()) dobAttempts.set(phone, { count: 1, until: Date.now() + DOB_WINDOW_MS });
+  else rec.count += 1;
+}
+
+const TOO_MANY = 'Too many attempts for this number. Please try again after some time.';
+
+exports.signupPhone = async (req, res) => {
+  try {
+    const { name, password } = req.body;
+    const phone = normalizePhone(req.body.phone);
+    const dob = dobKey(req.body.dob);
+    if (!name?.trim()) return res.status(400).json({ message: 'Name is required' });
+    if (!phone) return res.status(400).json({ message: 'Enter a valid 10 digit mobile number' });
+    if (!dob) return res.status(400).json({ message: 'Select a valid date of birth' });
+    if (!password || password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    if (await User.findOne({ phone }))
+      return res.status(409).json({ message: 'An account with this mobile number already exists' });
+    const user = await User.create({
+      name: name.trim(),
+      phone,
+      dob,
+      passwordHash: await bcrypt.hash(password, 10),
+    });
+    res.json({ message: 'Account created', token: signToken(user), ...(await withProfile(user)) });
+  } catch (e) {
+    if (e.code === 11000) return res.status(409).json({ message: 'An account with this mobile number already exists' });
+    res.status(500).json({ message: e.message });
+  }
+};
+
+exports.loginPhone = async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body.phone);
+    if (!phone) return res.status(400).json({ message: 'Enter a valid 10 digit mobile number' });
+    const dob = req.body.dob ? dobKey(req.body.dob) : null;
+    if (req.body.dob && !dob) return res.status(400).json({ message: 'Select a valid date of birth' });
+    const password = req.body.password || '';
+    if (!dob && !password) return res.status(400).json({ message: 'Enter your password or your date of birth' });
+    // Locking the number out here would also lock out its owner, so only dob guesses are capped.
+    if (dob && dobBlocked(phone)) return res.status(429).json({ message: TOO_MANY });
+    const user = await User.findOne({ phone });
+    let ok = false;
+    if (dob) ok = Boolean(user?.dob && user.dob === dob);
+    else ok = Boolean(user?.passwordHash && (await bcrypt.compare(password, user.passwordHash)));
+    if (!ok) {
+      if (dob) dobFailed(phone);
+      return res
+        .status(401)
+        .json({ message: dob ? 'Mobile number and date of birth do not match' : 'Invalid mobile number or password' });
+    }
+    dobAttempts.delete(phone);
+    res.json({ token: signToken(user), ...(await withProfile(user)) });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+};
+
+// Phone plus the registered date of birth is the proof, so the new password is set in
+// the same call and the caller is signed straight in.
+exports.forgotPhoneReset = async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body.phone);
+    const dob = dobKey(req.body.dob);
+    const { newPassword } = req.body;
+    if (!phone) return res.status(400).json({ message: 'Enter a valid 10 digit mobile number' });
+    if (!dob) return res.status(400).json({ message: 'Select a valid date of birth' });
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    if (dobBlocked(phone)) return res.status(429).json({ message: TOO_MANY });
+    const user = await User.findOne({ phone });
+    if (!user?.dob || user.dob !== dob) {
+      dobFailed(phone);
+      return res.status(401).json({ message: 'Mobile number and date of birth do not match our records' });
+    }
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    dobAttempts.delete(phone);
+    res.json({ message: 'Password updated', token: signToken(user), ...(await withProfile(user)) });
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
