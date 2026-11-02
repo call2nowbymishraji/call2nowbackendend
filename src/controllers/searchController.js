@@ -1,4 +1,5 @@
 const BusinessProfile = require('../models/BusinessProfile');
+const { requestedCountry, countryQuery } = require('../utils/countryFilter');
 
 const escapeRegex = (s = '') => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -60,9 +61,12 @@ function queryTokens(q) {
 exports.search = async (req, res) => {
   try {
     const { q, category, location } = req.query;
+    const country = requestedCountry(req.query.country);
     const filter = { status: 'active' };
     if (category) filter.category = new RegExp(`^${escapeRegex(category)}$`, 'i');
     const and = [];
+    const cf = countryQuery(country);
+    if (cf) and.push(cf);
     // Location words are place names, so they are kept as typed and each one must land on a
     // geo field. That makes "Jaipur Rajasthan" narrow the result instead of widening it.
     for (const t of splitWords(location)) {
@@ -84,7 +88,10 @@ exports.search = async (req, res) => {
 
 exports.suggested = async (req, res) => {
   try {
-    const profiles = await BusinessProfile.find({ status: 'active', suggested: true })
+    const cf = countryQuery(requestedCountry(req.query.country));
+    const filter = { status: 'active', suggested: true };
+    if (cf) Object.assign(filter, cf);
+    const profiles = await BusinessProfile.find(filter)
       .sort({ 'promo.days': -1, 'promo.startDate': -1, createdAt: -1 })
       .limit(24);
     res.json({ profiles });
