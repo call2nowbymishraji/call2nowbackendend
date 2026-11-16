@@ -11,6 +11,10 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, unique: true, sparse: true },
     dob: { type: String, default: null },
     passwordHash: { type: String, default: null },
+    // Tokens are stateless, so this counter is what makes a password change take effect right
+    // away: every token carries the version it was minted at and a mismatch is refused. It
+    // starts at 0 on existing accounts, so deploying this cannot sign anybody out.
+    passwordVersion: { type: Number, default: 0 },
     googleId: { type: String, default: null },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
   },

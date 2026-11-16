@@ -44,14 +44,11 @@ const profileSchema = new mongoose.Schema(
     operationDays: { type: [String], default: [] },
     operationOpen: { type: String, default: '09:00' },
     operationClose: { type: String, default: '21:00' },
-    gallery: { type: [String], default: [], validate: (v) => v.length <= 9 },
-    products: {
-      type: [productSchema],
-      validate: {
-        validator: (v) => v.length >= 1 && v.length <= 10,
-        message: 'A profile needs between 1 and 10 products',
-      },
-    },
+    // No length validators here on purpose. Profiles saved under the older 9 photo and 10 product
+    // limits stay savable (the admin promo and product screens call save()), so the 5/5 ceiling
+    // lives in profileController where a new or edited listing is checked.
+    gallery: { type: [String], default: [] },
+    products: { type: [productSchema], default: [] },
     promo: {
       days: { type: Number, enum: [0, 30, 60, 365, 36500], default: 0 },
       startDate: { type: Date, default: null },
@@ -59,11 +56,15 @@ const profileSchema = new mongoose.Schema(
     status: { type: String, enum: ['active', 'removed'], default: 'active' },
     suggested: { type: Boolean, default: false },
     verified: { type: Boolean, default: false },
+    // Every like that passes the one-per-device check raises this by one, so search can order
+    // by popularity without counting the Like collection for each result.
+    likes: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
 profileSchema.index({ shopName: 'text', ownerName: 'text', description: 'text', category: 'text' });
 profileSchema.index({ city: 1, state: 1 });
+profileSchema.index({ likes: -1, createdAt: -1 });
 
 module.exports = mongoose.model('BusinessProfile', profileSchema);

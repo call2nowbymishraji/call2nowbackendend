@@ -1,4 +1,6 @@
+const bcrypt = require('bcryptjs');
 const BusinessProfile = require('../models/BusinessProfile');
+const User = require('../models/User');
 const PromoSlide = require('../models/PromoSlide');
 const Ad = require('../models/Ad');
 const { storeFile } = require('../utils/files');
@@ -46,9 +48,38 @@ exports.removeProduct = async (req, res) => {
   const before = profile.products.length;
   profile.products = profile.products.filter((p) => String(p._id) !== req.params.productId);
   if (profile.products.length === before) return res.status(404).json({ message: 'Product not found' });
-  if (profile.products.length === 0) return res.status(400).json({ message: 'A profile must keep at least 1 product' });
   await profile.save();
   res.json({ message: 'Product removed', profile });
+};
+
+// Accounts, not profiles: an owner who never finished a listing still has a login that has to
+// be reachable here. hasPassword tells the admin a Google-only account is getting its first one.
+exports.listUsers = async (req, res) => {
+  const users = await User.find().sort({ createdAt: -1 }).limit(500);
+  res.json({
+    users: users.map((u) => ({
+      _id: u._id,
+      name: u.name,
+      email: u.email || '',
+      phone: u.phone || '',
+      role: u.role,
+      createdAt: u.createdAt,
+      hasPassword: Boolean(u.passwordHash),
+    })),
+  });
+};
+
+exports.setUserPassword = async (req, res) => {
+  const { password } = req.body;
+  // The same floor signup and the OTP reset use, so a password set here behaves identically.
+  if (!password || password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'Account not found' });
+  user.passwordHash = await bcrypt.hash(password, 10);
+  user.passwordVersion = (user.passwordVersion || 0) + 1;
+  await user.save();
+  // The new password is never echoed back, so it cannot end up in a response log.
+  res.json({ message: `Password updated for ${user.name}. They will need to log in again.` });
 };
 
 exports.listSlides = async (req, res) => {

@@ -184,6 +184,7 @@ exports.forgotReset = async (req, res) => {
     if (!otp || otp.expiresAt < new Date()) return res.status(400).json({ message: 'Invalid or expired reset link' });
     const user = await User.findOne({ email: otp.email });
     user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordVersion = (user.passwordVersion || 0) + 1;
     await user.save();
     await Otp.deleteOne({ _id: otp._id });
     res.json({ message: 'Password updated successfully' });
@@ -283,6 +284,7 @@ exports.forgotPhoneReset = async (req, res) => {
       return res.status(401).json({ message: 'Mobile number and date of birth do not match our records' });
     }
     user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordVersion = (user.passwordVersion || 0) + 1;
     await user.save();
     dobAttempts.delete(phone);
     res.json({ message: 'Password updated', token: signToken(user), ...(await withProfile(user)) });

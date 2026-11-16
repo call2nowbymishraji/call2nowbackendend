@@ -60,10 +60,13 @@ function queryTokens(q) {
 
 exports.search = async (req, res) => {
   try {
-    const { q, category, location } = req.query;
+    const { q, category, location, suggested } = req.query;
     const country = requestedCountry(req.query.country);
     const filter = { status: 'active' };
     if (category) filter.category = new RegExp(`^${escapeRegex(category)}$`, 'i');
+    // "View all" on the homepage asks for this: the same list, ranking and filters, narrowed to
+    // the profiles the admin marked as suggested.
+    if (suggested === '1' || suggested === 'true') filter.suggested = true;
     const and = [];
     const cf = countryQuery(country);
     if (cf) and.push(cf);
@@ -78,8 +81,17 @@ exports.search = async (req, res) => {
       and.push({ $or: SEARCH_FIELDS.map((f) => ({ [f]: rx })) });
     }
     if (and.length) filter.$and = and;
-    const profiles = await BusinessProfile.find(filter).sort({ createdAt: -1 }).limit(100);
-    profiles.sort((a, b) => promoScore(b) - promoScore(a));
+    // Most liked first: sorting in the query means the page limit keeps the popular shops rather
+    // than the newest ones when a search matches more profiles than it can show.
+    const profiles = await BusinessProfile.find(filter).sort({ likes: -1, createdAt: -1 }).limit(100);
+    // A paid promotion still buys the front of the list, so it outranks likes. Behind it, likes
+    // decide the order and a like tie falls back to the newer profile.
+    profiles.sort(
+      (a, b) =>
+        promoScore(b) - promoScore(a) ||
+        (b.likes || 0) - (a.likes || 0) ||
+        new Date(b.createdAt) - new Date(a.createdAt)
+    );
     res.json({ profiles });
   } catch (e) {
     res.status(500).json({ message: e.message });

@@ -17,6 +17,8 @@ router.put('/profiles/:id/verified', wrap(c.setVerified));
 router.put('/profiles/:id/suggested', wrap(c.setSuggested));
 router.delete('/profiles/:id', wrap(c.deleteProfile));
 router.delete('/profiles/:id/products/:productId', wrap(c.removeProduct));
+router.get('/users', wrap(c.listUsers));
+router.put('/users/:id/password', wrap(c.setUserPassword));
 router.get('/slides', wrap(c.listSlides));
 router.post('/slides', upload.single('image'), wrap(c.createSlide));
 router.put('/slides/:id', wrap(c.updateSlide));

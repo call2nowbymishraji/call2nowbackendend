@@ -54,6 +54,10 @@ if (IS_PROD && CONFIGURED_ORIGINS) {
 }
 
 const app = express();
+// Likes are capped per connection, so the client address has to come from the proxy header one
+// hop in front of this app (Render, Netlify or the local dev server) and not from anything a
+// caller can invent.
+app.set('trust proxy', 1);
 app.use(
   cors({
     origin(origin, cb) {
@@ -74,6 +78,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/profiles', require('./routes/profiles'));
+app.use('/api/likes', require('./routes/likes'));
 app.use('/api/search', require('./routes/search'));
 app.use('/api/promo', require('./routes/promo'));
 app.use('/api/geo', require('./routes/geo'));

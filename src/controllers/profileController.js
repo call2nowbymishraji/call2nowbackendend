@@ -5,6 +5,9 @@ const { storeFile } = require('../utils/files');
 const fileByField = (req, field) => req.files?.find((f) => f.fieldname === field);
 const filesByField = (req, field) => req.files?.filter((f) => f.fieldname === field) || [];
 
+const MAX_GALLERY = 5;
+const MAX_PRODUCTS = 5;
+
 function parseBody(req) {
   const b = req.body;
   const bool = (v) => v === true || v === 'true';
@@ -69,7 +72,7 @@ async function assemble(data, req) {
   out.shopImage = shopFile ? await storeFile(shopFile, 'shops') : req.body.keepShopImage || null;
 
   const newGallery = await Promise.all(filesByField(req, 'gallery').map((f) => storeFile(f, 'gallery')));
-  out.gallery = [...data.keepGallery, ...newGallery].slice(0, 9);
+  out.gallery = [...data.keepGallery, ...newGallery].slice(0, MAX_GALLERY);
 
   out.products = await Promise.all(
     data.products.map(async (p, i) => {
@@ -86,7 +89,7 @@ async function assemble(data, req) {
   return out;
 }
 
-function validate(data, res) {
+function validate(data, res, req) {
   if (!data.category?.trim()) return res.status(400).json({ message: 'Category is required' });
   if (!data.shopName?.trim()) return res.status(400).json({ message: 'Shop / business name is required' });
   if (!data.ownerName?.trim()) return res.status(400).json({ message: 'Owner name is required' });
@@ -100,8 +103,12 @@ function validate(data, res) {
   } else if (data.pincode && !/^[A-Za-z0-9][A-Za-z0-9 -]{2,9}$/.test(data.pincode)) {
     return res.status(400).json({ message: 'Postal code looks invalid' });
   }
-  if (!data.products.length) return res.status(400).json({ message: 'At least 1 product is compulsory' });
-  if (data.products.length > 10) return res.status(400).json({ message: 'Maximum 10 products allowed' });
+  // Listing products is optional, a services-only shop submits none at all.
+  if (data.products.length > MAX_PRODUCTS) return res.status(400).json({ message: `Maximum ${MAX_PRODUCTS} products allowed` });
+  // Refused rather than trimmed, so an owner who still holds photos from the old 9 photo limit
+  // chooses which ones to keep instead of losing them on save.
+  const galleryCount = data.keepGallery.length + filesByField(req, 'gallery').length;
+  if (galleryCount > MAX_GALLERY) return res.status(400).json({ message: `Maximum ${MAX_GALLERY} gallery photos allowed` });
   for (const p of data.products) {
     if (!p.name?.trim()) return res.status(400).json({ message: 'Every product needs a name' });
     if (!p.description?.trim()) return res.status(400).json({ message: `Product "${p.name}" needs a description` });
@@ -116,7 +123,7 @@ exports.create = async (req, res) => {
     const existing = await BusinessProfile.findOne({ user: req.user._id });
     if (existing) return res.status(400).json({ message: 'You already have a profile. Edit it instead.' });
     const data = parseBody(req);
-    const err = validate(data, res);
+    const err = validate(data, res, req);
     if (err) return;
     const body = await assemble(data, req);
     const profile = await BusinessProfile.create({
@@ -135,7 +142,7 @@ exports.update = async (req, res) => {
     const profile = await BusinessProfile.findOne({ _id: req.params.id, user: req.user._id });
     if (!profile) return res.status(404).json({ message: 'Profile not found' });
     const data = parseBody(req);
-    const err = validate(data, res);
+    const err = validate(data, res, req);
     if (err) return;
     const body = await assemble(data, req);
     Object.assign(profile, body);
