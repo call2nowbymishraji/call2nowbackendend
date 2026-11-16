@@ -9,7 +9,6 @@ const userSchema = new mongoose.Schema(
     // absent paths only.
     email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     phone: { type: String, unique: true, sparse: true },
-    dob: { type: String, default: null },
     passwordHash: { type: String, default: null },
     // Tokens are stateless, so this counter is what makes a password change take effect right
     // away: every token carries the version it was minted at and a mismatch is refused. It
