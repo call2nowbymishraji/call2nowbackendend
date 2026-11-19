@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const BusinessProfile = require('../models/BusinessProfile');
 const User = require('../models/User');
+const Like = require('../models/Like');
 const PromoSlide = require('../models/PromoSlide');
 const Ad = require('../models/Ad');
 const { storeFile } = require('../utils/files');
@@ -71,7 +72,7 @@ exports.listUsers = async (req, res) => {
 
 exports.setUserPassword = async (req, res) => {
   const { password } = req.body;
-  // The same floor signup and the OTP reset use, so a password set here behaves identically.
+  // The same floor phone signup uses, so a password set here behaves identically.
   if (!password || password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ message: 'Account not found' });
@@ -80,6 +81,21 @@ exports.setUserPassword = async (req, res) => {
   await user.save();
   // The new password is never echoed back, so it cannot end up in a response log.
   res.json({ message: `Password updated for ${user.name}. They will need to log in again.` });
+};
+
+// A duplicate or abandoned signup can only be cleared from here, so the delete takes the
+// owner's listing and the likes on it with it. The last admin is refused because there
+// would be nobody left who can sign in to fix it.
+exports.deleteUser = async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'Account not found' });
+  if (user.role === 'admin' && (await User.countDocuments({ role: 'admin' })) <= 1)
+    return res.status(400).json({ message: 'You cannot delete the only admin account' });
+  const profileIds = (await BusinessProfile.find({ user: user._id }).select('_id')).map((p) => p._id);
+  await Like.deleteMany({ profile: { $in: profileIds } });
+  await BusinessProfile.deleteMany({ user: user._id });
+  await user.deleteOne();
+  res.json({ message: `${user.name} and their listing were deleted` });
 };
 
 exports.listSlides = async (req, res) => {
